@@ -8,8 +8,8 @@ XML_FOLDER = r"D:\litmus7\pro\xml_files"
 EXCLUDED_ATTRIBUTES_FILE = "ignore_attributes.csv"
 INPUT_CSV_CASE1 = "file_pairs.csv"
 ORDER_PAIR_CSV = "orders_to_compare.csv"
-DB_CONFIG_xml = dict(host="localhost", user="root", password="Nevin@134", database="xml5")
-DB_CONFIG_json = dict(host="localhost", user="root", password="Nevin@134", database="json_db")
+DB_CONFIG_xml = dict(host="localhost", user="root", password="004", database="xml5")
+DB_CONFIG_json = dict(host="localhost", user="root", password="004", database="json_db")
 INPUT_CSV_JSON = "input_json.csv"
 ORDER_PAIR_JSON       = "orders_to_compare_json.csv" 
 DEBUG = False
