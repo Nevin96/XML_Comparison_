@@ -4,6 +4,7 @@ import os
 import mysql.connector
 import json
 
+
 XML_FOLDER = r"D:\litmus7\pro\xml_files"
 EXCLUDED_ATTRIBUTES_FILE = "ignore_attributes.csv"
 INPUT_CSV_CASE1 = "file_pairs.csv"
@@ -95,14 +96,38 @@ def flatten_json(obj, path=""):
         items[path] = str(obj)
     return items
 
-def compare_json_files(json1, json2):
-    """Compare two JSON objects returning list of differences"""
+def compare_json_files(json1, json2, excluded_attrs=None):
+    """Compare two JSON objects returning list of differences, respecting excluded attributes"""
+    if excluded_attrs is None:
+        excluded_attrs = set()
+    
     flat1 = flatten_json(json1)
     flat2 = flatten_json(json2)
     diffs = []
 
     keys = set(flat1.keys()).union(set(flat2.keys()))
     for key in keys:
+        # Check if this key should be excluded
+        should_exclude = False
+        
+        # Check for exact match first
+        if key in excluded_attrs:
+            should_exclude = True
+        else:
+            # Check for pattern matches by normalizing array notation
+            normalized_key = key
+            # Convert Items[1].ProductID to Items.ProductID for comparison
+            import re
+            normalized_key = re.sub(r'\[\d+\]', '', key)
+            
+            if normalized_key in excluded_attrs:
+                should_exclude = True
+        
+        if should_exclude:
+            if DEBUG:
+                print(f"Excluding JSON key '{key}' from comparison")
+            continue
+            
         val1 = flat1.get(key, "-")
         val2 = flat2.get(key, "-")
         if val1 != val2:
@@ -291,7 +316,8 @@ def process_case3(input_csv, output_csv):
     CSV columns must include 'wcs_json' and 'micro_json' with file names including extensions
     """
     all_diffs = []
-
+    excluded = load_excluded_attributes()  # This was already being loaded but not used
+    
     with open(input_csv, newline="", encoding="utf-8") as f:
         rdr = csv.DictReader(f)
         required_fields = {"wcs_json", "micro_json"}
@@ -310,7 +336,8 @@ def process_case3(input_csv, output_csv):
                 print("🛑 JSON parse error:", e)
                 continue
 
-            all_diffs.extend(compare_json_files(json1, json2))
+            # Now pass excluded attributes to the comparison function
+            all_diffs.extend(compare_json_files(json1, json2, excluded))
 
     write_csv(all_diffs, output_csv)
 
@@ -319,8 +346,10 @@ def process_case4(out="all_differences_case4.csv", pair_csv=ORDER_PAIR_JSON):
     Case 4: Compare JSON content from DB for pairs specified in orders_to_compare_json.csv
     CSV columns: wcs_order_id, micro_order_id
     """
+    excluded = load_excluded_attributes()  # Add this line to load excluded attributes
     conn = mysql.connector.connect(**DB_CONFIG)
     diffs = []
+    
     with open(pair_csv, encoding="utf-8") as f:
         rdr = csv.DictReader(f)
         required_fields = {"wcs_order_id", "micro_order_id"}
@@ -344,7 +373,9 @@ def process_case4(out="all_differences_case4.csv", pair_csv=ORDER_PAIR_JSON):
         except json.JSONDecodeError as e:
             print("🛑 decode error:", e)
             continue
-        diffs += compare_json_files(j1, j2)
+        # Pass excluded attributes to the comparison function
+        diffs += compare_json_files(j1, j2, excluded)
+    
     conn.close()
     write_csv(diffs, out)
 
