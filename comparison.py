@@ -210,7 +210,10 @@ def compare_dicts(wcs_dict: dict, micro_dict: dict, excluded_attrs: set):
         
         # Compare text content
         if wcs_elem["text"] != mic_elem["text"]:
-            diffs.append(("(text)", "Text mismatch", wcs_elem["text"], mic_elem["text"]))
+            name_hint = wcs_elem["attrib"].get("name") or path.split("/")[-1]
+            diffs.append((name_hint, "Text mismatch", wcs_elem["text"], mic_elem["text"]))
+
+        
 
     # Check for extra elements in micro
     for path, mic_elem in filtered_micro.items():
