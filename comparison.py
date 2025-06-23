@@ -95,6 +95,30 @@ def flatten_json(obj, path=""):
     else:
         items[path] = str(obj)
     return items
+def flatten_har(har_data):
+    """
+    Fully flatten a HAR file into dot-path key dictionary, including metadata and entries.
+    Supports generalized comparison.
+    """
+    flat = {}
+
+    def recurse(obj, path=""):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                new_path = f"{path}.{k}" if path else k
+                recurse(v, new_path)
+        elif isinstance(obj, list):
+            for i, v in enumerate(obj):
+                new_path = f"{path}[{i}]"
+                recurse(v, new_path)
+        else:
+            flat[path] = str(obj)
+
+    recurse(har_data)
+    return flat
+
+
+
 
 def compare_json_files(json1, json2, excluded_attrs=None):
     """Compare two JSON objects returning list of differences, respecting excluded attributes"""
@@ -224,6 +248,23 @@ def compare_dicts(wcs_dict: dict, micro_dict: dict, excluded_attrs: set):
                 diffs.append((name_hint, "Extra tag", "-", mic_elem["text"]))
 
     return diffs
+def compare_har_files(har1, har2):
+    diffs = []
+    flat1 = flatten_har(har1)
+    flat2 = flatten_har(har2)
+
+    all_keys = set(flat1.keys()).union(flat2.keys())
+    for key in all_keys:
+        v1 = flat1.get(key, "-")
+        v2 = flat2.get(key, "-")
+        if v1 != v2:
+            if key in flat1 and key in flat2:
+                diff_type = "Value mismatch"
+            else:
+                diff_type = "Missing key"
+            diffs.append((key, diff_type, v1, v2))
+    return diffs
+
 
 def process_case1(input_csv, output_csv):
     """
@@ -382,6 +423,39 @@ def process_case4(out="all_differences_case4.csv", pair_csv=ORDER_PAIR_JSON):
     conn.close()
     write_csv(diffs, out)
 
+def process_case5(input_csv="har_pairs.csv", output_csv="all_differences_case5.csv"):
+    """
+    Case 5: Compare HAR files using flatten_har() + compare_har_files()
+    CSV columns: wcs_har, micro_har (no extension needed)
+    """
+    all_diffs = []
+
+    with open(input_csv, newline="", encoding="utf-8") as f:
+        rdr = csv.DictReader(f)
+        required_fields = {"wcs_har", "micro_har"}
+        if not required_fields.issubset(rdr.fieldnames):
+            raise ValueError(f"CSV must have columns: {required_fields}")
+        
+        for row in rdr:
+            wcs_path = os.path.join(XML_FOLDER, row["wcs_har"] + ".har")
+            mic_path = os.path.join(XML_FOLDER, row["micro_har"] + ".har")
+            print(f"\n🔍 Comparing HAR: {row['wcs_har']}.har ↔ {row['micro_har']}.har")
+
+            try:
+                with open(wcs_path, "r", encoding="utf-8") as f1, open(mic_path, "r", encoding="utf-8") as f2:
+                    har1 = json.load(f1)
+                    har2 = json.load(f2)
+            except Exception as e:
+                print("🛑 HAR load error:", e)
+                continue
+
+            diffs = compare_har_files(har1, har2)
+            all_diffs.extend(diffs)
+
+    write_csv(all_diffs, output_csv)
+
+
+
 def write_csv(rows, out_path):
     """Write differences to CSV file"""
     with open(out_path, "w", newline="", encoding="utf-8") as f:
@@ -391,11 +465,15 @@ def write_csv(rows, out_path):
     print(f"\n✅ {len(rows)} difference rows written ➜ {out_path}")
 
 def main():
-    print("Select source:\n 1 – File System\n 2 – Database")
-    source_choice = input("Enter 1 or 2: ").strip()
+    print("Select source:\n 1 – File System\n 2 – Database\n 3 – HAR")
+    source_choice = input("Enter 1, 2, or 3: ").strip()
 
-    if source_choice not in ("1", "2"):
+    if source_choice not in ("1", "2", "3"):
         print("Invalid source selection. Exiting.")
+        return
+
+    if source_choice == "3":
+        process_case5()
         return
 
     print("\nSelect data format:\n 1 – XML\n 2 – JSON")
@@ -413,6 +491,7 @@ def main():
         process_case3(INPUT_CSV_JSON, "all_differences_case3.csv")   
     elif source_choice == "2" and format_choice == "2":
         process_case4("all_differences_case4.csv")                  
+                  
 
 if __name__ == "__main__":
     main()
